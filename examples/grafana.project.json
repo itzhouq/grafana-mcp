@@ -1,0 +1,15 @@
+{
+  "defaultEnv": "test",
+  "app": "my-app",
+  "appLabel": "app",
+  "namespace": "my-namespace",
+  "notes": "本项目日志标签 app=my-app；查指标时 pod 前缀为 my-app-",
+  "environments": {
+    "test": {
+      "datasources": {
+        "loki": "grafana-loki-uid",
+        "prometheus": "grafana-prometheus-uid"
+      }
+    }
+  }
+}

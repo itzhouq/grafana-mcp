@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞
+    url: https://github.com/itzhouq/grafana-mcp/security/advisories/new
+    about: 请走私密渠道报告，不要开 public issue

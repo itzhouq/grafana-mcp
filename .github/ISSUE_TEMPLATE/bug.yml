@@ -1,0 +1,36 @@
+name: Bug 报告
+description: 报告 grafana-mcp 的问题
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 期望行为 vs 实际行为。**不要粘贴真实 URL、凭据或业务日志内容**，一律使用占位符。
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 配置 ...
+        2. 调用工具 `xxx`，参数 ...
+        3. 返回 ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: grafana-mcp 版本
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP 客户端
+      description: 如 Claude Code / Cursor / 其他
+      placeholder: "Claude Code"
+    validations:
+      required: false

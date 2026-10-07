@@ -1,0 +1,98 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.itzhouq/grafana-mcp",
+  "title": "Grafana MCP",
+  "description": "Read-only project-level Grafana MCP: Loki logs, metrics, traces, alerts, test/prod switching",
+  "version": "0.1.0",
+  "homepage": "https://github.com/itzhouq/grafana-mcp",
+  "repository": {
+    "url": "https://github.com/itzhouq/grafana-mcp",
+    "source": "github"
+  },
+  "license": {
+    "name": "MIT"
+  },
+  "authors": [
+    {
+      "name": "itzhouq"
+    }
+  ],
+  "keywords": [
+    "grafana",
+    "loki",
+    "prometheus",
+    "tempo",
+    "mcp",
+    "observability",
+    "ai",
+    "agent"
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "grafana-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GRAFANA_TEST_URL",
+          "description": "Grafana base URL of the test environment, e.g. https://grafana.example.com",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "GRAFANA_TEST_USER",
+          "description": "Grafana username for the test environment (prefer a dedicated Viewer-role account)",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "GRAFANA_TEST_PASSWORD",
+          "description": "Grafana password for the test environment",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "GRAFANA_PROD_URL",
+          "description": "Grafana base URL of the production environment",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "GRAFANA_PROD_USER",
+          "description": "Grafana username for the production environment",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "GRAFANA_PROD_PASSWORD",
+          "description": "Grafana password for the production environment",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "GRAFANA_ENV",
+          "description": "Default environment for this project (test by default)",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "GRAFANA_APP",
+          "description": "App label value used to scope Loki queries for this project",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+# npm 发布：push v* tag 触发，使用 Trusted Publishing（OIDC，无需 API token）。
+# 前置一次性配置：npmjs.com → 包 grafana-mcp（尚未发布时先以 Pending Publisher 占名）
+# → Settings → Trusted Publisher：repository owner=itzhouq，repository=grafana-mcp，
+#   workflow filename=release.yml，environment 留空。
+# 注意：Trusted Publishing 要求 npm CLI >= 11.5.1，因此显式升级 npm。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: 冒烟测试（无凭据模式，发布前把关）
+        run: bun run smoke
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: 升级 npm（Trusted Publishing 要求 >= 11.5.1）
+        run: npm install -g npm@latest
+      - name: Publish to npm
+        run: npm publish

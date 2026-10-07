@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "grafana": {
+      "command": "bun",
+      "args": ["run", "/path/to/grafana-mcp/index.ts"],
+      "env": {
+        "GRAFANA_ENV": "test"
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+name: 功能建议
+description: 提议新工具或改进
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决什么问题
+      description: 描述使用场景（例如：希望在 agent 排查时直接拿到某个面板的数据）
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望方案
+    validations:
+      required: false

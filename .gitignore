@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# 依赖与构建产物（本项目零依赖，防御性忽略）
+node_modules/
+dist/
+
+# 环境与密钥（Grafana 账密只应存在于 ~/.zshrc 或 chmod 600 的 config.json，绝不入库）
+.env
+*.local.json
+.grafana.json
+
+# 日志
+*.log
+
+# 敏感词本地词表（组织专属标识，绝不入库）
+scripts/sensitive_words.local.txt

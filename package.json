@@ -1,0 +1,49 @@
+{
+  "name": "grafana-mcp",
+  "version": "0.1.0",
+  "description": "Project-level read-only Grafana MCP server: Loki/Prometheus/Tempo/Alerts with test-prod switching and per-project context. Zero deps, runs on bun.",
+  "type": "module",
+  "bin": {
+    "grafana-mcp": "./index.ts"
+  },
+  "files": [
+    "index.ts",
+    "examples/",
+    "server.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "modelcontextprotocol",
+    "grafana",
+    "loki",
+    "prometheus",
+    "tempo",
+    "observability",
+    "logging",
+    "ai",
+    "agent",
+    "bun"
+  ],
+  "author": "itzhouq <zhouq218@gmail.com> (https://itzhouq.cn)",
+  "license": "MIT",
+  "homepage": "https://itzhouq.cn",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itzhouq/grafana-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/itzhouq/grafana-mcp/issues"
+  },
+  "scripts": {
+    "start": "bun run index.ts",
+    "smoke": "bun run test/smoke.ts",
+    "test": "bun run test/smoke.ts && bun run test/integration.ts"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
