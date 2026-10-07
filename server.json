@@ -3,7 +3,7 @@
   "name": "io.github.itzhouq/grafana-mcp",
   "title": "Grafana MCP",
   "description": "Read-only project-level Grafana MCP: Loki logs, metrics, traces, alerts, test/prod switching",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "homepage": "https://github.com/itzhouq/grafana-mcp",
   "repository": {
     "url": "https://github.com/itzhouq/grafana-mcp",
@@ -31,7 +31,7 @@
     {
       "registryType": "npm",
       "identifier": "grafana-mcp",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "transport": {
         "type": "stdio"
       },

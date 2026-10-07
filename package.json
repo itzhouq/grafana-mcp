@@ -1,6 +1,6 @@
 {
   "name": "grafana-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "mcpName": "io.github.itzhouq/grafana-mcp",
   "description": "Project-level read-only Grafana MCP server: Loki/Prometheus/Tempo/Alerts with test-prod switching and per-project context. Zero deps, runs on bun.",
   "type": "module",

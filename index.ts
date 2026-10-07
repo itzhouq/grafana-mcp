@@ -19,7 +19,14 @@ import { join, resolve } from "node:path";
 import { execSync } from "node:child_process";
 
 const SERVER_NAME = "grafana-mcp";
-const SERVER_VERSION = "0.1.0";
+// 版本号与 package.json 单一来源；以 index.ts 所在目录解析，兼容任意 cwd
+const SERVER_VERSION = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version as string;
+  } catch {
+    return "0.0.0";
+  }
+})();
 const MAX_OUTPUT_CHARS = 60_000;
 const HTTP_TIMEOUT_MS = 30_000;
 
