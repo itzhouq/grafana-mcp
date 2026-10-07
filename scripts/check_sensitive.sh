@@ -23,8 +23,8 @@ hits=""
 h=$(run_pattern '/Users/[a-z]+'); [ -n "$h" ] && hits+="$h"$'\n'
 # 环境变量被赋了具体值（文档允许 =... / $VAR 占位）
 h=$(git grep -inE 'GRAFANA_[A-Z_]*(URL|USER|PASSWORD)=[^. $]' -- . ':(exclude)scripts/check_sensitive.sh' || true); [ -n "$h" ] && hits+="$h"$'\n'
-# 硬编码密码字面量
-h=$(run_pattern 'password\s*[:=]\s*["'"'"'][^"'"'"']{6,}'); [ -n "$h" ] && hits+="$h"$'\n'
+# 硬编码密码字面量（排除常见占位值：文档示例与测试假值）
+h=$(run_pattern 'password\s*[:=]\s*["'"'"'][^"'"'"']{6,}' | grep -viE '你的|your|placeholder|example|xxx|changeme|dummy|secret' || true); [ -n "$h" ] && hits+="$h"$'\n'
 # 疑似内网 IP
 h=$(run_pattern 'https?://(10|172\.(1[6-9]|2[0-9]|3[01])|192\.168)\.'); [ -n "$h" ] && hits+="$h"$'\n'
 
