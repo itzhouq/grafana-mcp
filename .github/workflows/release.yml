@@ -28,5 +28,16 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - name: 升级 npm（Trusted Publishing 要求 >= 11.5.1）
         run: npm install -g npm@latest
+      - name: 已发布版本守卫（本地直发过的版本不重复发）
+        id: check
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if npm view "grafana-mcp@$VERSION" version >/dev/null 2>&1; then
+            echo "v$VERSION 已在 npm 上，跳过发布"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish to npm
+        if: steps.check.outputs.skip != 'true'
         run: npm publish
