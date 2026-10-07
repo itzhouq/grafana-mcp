@@ -28,16 +28,20 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - name: 升级 npm（Trusted Publishing 要求 >= 11.5.1）
         run: npm install -g npm@latest
-      - name: 已发布版本守卫（本地直发过的版本不重复发）
+      - name: 已发布版本守卫（等待 npm 元数据生效，本地直发过的版本不重复发）
         id: check
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          if npm view "grafana-mcp@$VERSION" version >/dev/null 2>&1; then
-            echo "v$VERSION 已在 npm 上，跳过发布"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
+          for i in $(seq 1 18); do
+            if npm view "grafana-mcp@$VERSION" version >/dev/null 2>&1; then
+              echo "v$VERSION 已在 npm 上，跳过发布"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "npm 尚未可见 v$VERSION（第 $i 次探测，npm 发布后元数据有延迟）"
+            sleep 10
+          done
+          echo "skip=false" >> "$GITHUB_OUTPUT"
       - name: Publish to npm
         if: steps.check.outputs.skip != 'true'
         run: npm publish
