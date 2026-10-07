@@ -1,5 +1,5 @@
 # 发布到 MCP 官方 Registry（registry.modelcontextprotocol.io）。
-# 在 Release 工作流（npm 发布）成功后自动执行，避免 npm 版本尚未生效导致归属校验失败。
+# Release 完成后，npm 索引可能还未同步新版本；本 workflow 主动轮询，避免 Registry 校验 404。
 # 命名空间 io.github.itzhouq 通过 GitHub OIDC 校验（仅限本仓库 Actions 运行）。
 name: Publish to MCP Registry
 
@@ -11,7 +11,7 @@ on:
 
 jobs:
   publish:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -19,7 +19,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: 等待 npm 指定版本在 Registry 可见
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          SERVER_VERSION="$(node -p "require('./server.json').version")"
+          if [ "$PACKAGE_VERSION" != "$SERVER_VERSION" ]; then
+            echo "package.json ($PACKAGE_VERSION) 与 server.json ($SERVER_VERSION) 版本不一致"
+            exit 1
+          fi
+
+          for i in $(seq 1 36); do
+            if [ "$(npm view "grafana-mcp@$PACKAGE_VERSION" version 2>/dev/null || true)" = "$PACKAGE_VERSION" ]; then
+              echo "npm 已可见 grafana-mcp@$PACKAGE_VERSION"
+              exit 0
+            fi
+            echo "npm 暂未可见 grafana-mcp@$PACKAGE_VERSION（第 $i/36 次探测）"
+            sleep 10
+          done
+
+          echo "等待 6 分钟后 npm 仍未可见 grafana-mcp@$PACKAGE_VERSION"
+          exit 1
 
       - name: Install mcp-publisher
         run: |
