@@ -2,6 +2,10 @@
 
 本项目的版本发布遵循 [Semantic Versioning](https://semver.org/)，发版为 tag 驱动：推送 `v*` tag 自动发布 npm 并同步 MCP Registry。
 
+## [0.1.1] - 2026-10-07
+
+- package.json 增加 `mcpName` 字段（MCP 官方 Registry 对 npm 包的归属校验要求）
+
 ## [0.1.0] - 2026-10-07
 
 首个公开发布版本。
