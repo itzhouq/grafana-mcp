@@ -3,13 +3,17 @@
  * grafana-mcp — 项目级 Grafana MCP server（stdio，零依赖，bun 直接运行）
  *
  * 解决两个痛点：
- *   1. 项目上下文（Grafana 中的 app 名称、namespace、默认环境）配置在项目根的 `.grafana.json`
- *      或 `.mcp.json` 的 env 中，agent 通过 project_context 工具即可对齐方向，无需每次口头指定。
- *   2. test/prod 双环境连接信息直接解析 `~/.zshrc` / `~/.zshenv` 文本中的 `GRAFANA_{ENV}_*` 变量，
- *      不依赖子进程继承 shell 环境（MCP server 由客户端 spawn，非交互 shell 不会 source .zshrc）。
+ *   1. 项目上下文（Grafana 中的 app 名称、namespace、默认环境）可在项目根 `.grafana.json`
+ *      或 `.mcp.json` 的 env 中配置（GRAFANA_APP / GRAFANA_NAMESPACE / GRAFANA_ENV 等），
+ *      agent 通过 project_context 工具即可对齐方向，无需每次口头指定。
+ *   2. test/prod 双环境连接信息支持三种来源，按优先级合并：
+ *      a) 进程环境变量（.mcp.json env）：GRAFANA_{ENV}_{URL|USER|PASSWORD|...}
+ *         —— 零全局依赖，每个项目独立配置，不依赖 ~/.zshrc。
+ *      b) ~/.zshrc / ~/.zshenv 文本解析：同上格式，适合全机统一配置。
+ *      c) 全局配置文件 ~/.config/grafana-mcp/config.json。
  *
  * 协议：MCP stdio（newline-delimited JSON-RPC 2.0）。
- * 查询能力与全局 skill（~/.agents/skills/grafana）一致：Loki / Prometheus / Tempo / Alerts。
+ * 查询能力：Loki / Prometheus / Tempo / Alerts。
  */
 
 import { createInterface } from "node:readline";
@@ -186,22 +190,45 @@ const globalEnvs: Record<string, EnvConfig> = Object.fromEntries(
 
 const projectConfigPath = findProjectConfig();
 const projectConfig: ProjectConfig = (() => {
-  if (!projectConfigPath) return {};
-  const r = asRecord(readJsonFile(projectConfigPath));
-  return {
-    defaultEnv: typeof r.defaultEnv === "string" ? r.defaultEnv : undefined,
-    app: typeof r.app === "string" ? r.app : undefined,
-    appLabel: typeof r.appLabel === "string" ? r.appLabel : undefined,
-    namespace: typeof r.namespace === "string" ? r.namespace : undefined,
-    notes: typeof r.notes === "string" ? r.notes : undefined,
-    environments: Object.fromEntries(
-      Object.entries(asRecord(r.environments)).map(([k, v]) => [k, pickEnvConfig(v)]),
-    ),
-  };
+  let cfg: ProjectConfig = {};
+  if (projectConfigPath) {
+    const r = asRecord(readJsonFile(projectConfigPath));
+    cfg = {
+      defaultEnv: typeof r.defaultEnv === "string" ? r.defaultEnv : undefined,
+      app: typeof r.app === "string" ? r.app : undefined,
+      appLabel: typeof r.appLabel === "string" ? r.appLabel : undefined,
+      namespace: typeof r.namespace === "string" ? r.namespace : undefined,
+      notes: typeof r.notes === "string" ? r.notes : undefined,
+      environments: Object.fromEntries(
+        Object.entries(asRecord(r.environments)).map(([k, v]) => [k, pickEnvConfig(v)]),
+      ),
+    };
+  }
+  // 进程环境变量（.mcp.json env）覆盖 .grafana.json 的项目上下文字段
+  if (process.env.GRAFANA_APP) cfg.app = process.env.GRAFANA_APP;
+  if (process.env.GRAFANA_APP_LABEL) cfg.appLabel = process.env.GRAFANA_APP_LABEL;
+  if (process.env.GRAFANA_NAMESPACE) cfg.namespace = process.env.GRAFANA_NAMESPACE;
+  if (process.env.GRAFANA_NOTES) cfg.notes = process.env.GRAFANA_NOTES;
+  return cfg;
 })();
 
+/** 扫描进程环境变量中的 GRAFANA_{ENV}_URL 模式，发现仅在 .mcp.json env 中配置的环境 */
+function envScopedEnvs(): string[] {
+  const found: string[] = [];
+  for (const key of Object.keys(process.env)) {
+    const m = key.match(/^GRAFANA_([A-Za-z0-9]+)_URL$/);
+    if (m) found.push(m[1].toLowerCase());
+  }
+  return found;
+}
+
 function availableEnvs(): string[] {
-  const names = new Set([...Object.keys(rcEnvs), ...Object.keys(globalEnvs), ...Object.keys(projectConfig.environments ?? {})]);
+  const names = new Set([
+    ...Object.keys(rcEnvs),
+    ...Object.keys(globalEnvs),
+    ...Object.keys(projectConfig.environments ?? {}),
+    ...envScopedEnvs(),
+  ]);
   return [...names].sort();
 }
 
@@ -474,11 +501,21 @@ async function toolProjectContext(): Promise<string> {
   lines.push(`可用环境: ${availableEnvs().join(", ") || "（无，请检查 ~/.zshrc 或配置文件）"}`);
   lines.push("");
   lines.push(`配置来源层级: 进程环境变量(.mcp.json env) > 项目 ${projectConfigPath ?? "（未找到 .grafana.json）"} > 全局 ${globalConfigPath}${existsSync(globalConfigPath) ? "" : "（不存在）"} > ~/.zshrc 文本解析${Object.keys(rcEnvs).length ? "（已解析到 " + Object.keys(rcEnvs).join(", ") + "）" : "（未解析到 GRAFANA_* 变量）"}`);
+  const envScopedList = envScopedEnvs();
+  if (envScopedList.length) {
+    lines.push(`.mcp.json env 已配置的环境: ${envScopedList.join(", ")}（地址/凭据通过 GRAFANA_{ENV}_* 传入）`);
+  }
   lines.push("");
   if (projectConfig.app || projectConfig.namespace || projectConfig.notes) {
     lines.push("── 项目信息 ──");
-    if (projectConfig.app) lines.push(`项目 App: ${projectConfig.app}（Loki 标签 ${projectConfig.appLabel ?? "app"}，loki_query 默认自动注入）`);
-    if (projectConfig.namespace) lines.push(`Namespace: ${projectConfig.namespace}`);
+    if (projectConfig.app) {
+      const appSource = process.env.GRAFANA_APP ? "（来自 .mcp.json env GRAFANA_APP）" : projectConfigPath ? "（来自 .grafana.json）" : "";
+      lines.push(`项目 App: ${projectConfig.app}${appSource}，Loki 标签 ${projectConfig.appLabel ?? "app"}，loki_query 默认自动注入`);
+    }
+    if (projectConfig.namespace) {
+      const nsSource = process.env.GRAFANA_NAMESPACE ? "（来自 .mcp.json env）" : projectConfigPath ? "（来自 .grafana.json）" : "";
+      lines.push(`Namespace: ${projectConfig.namespace}${nsSource}`);
+    }
     if (projectConfig.notes) lines.push(`备注: ${projectConfig.notes}`);
     lines.push("");
   }

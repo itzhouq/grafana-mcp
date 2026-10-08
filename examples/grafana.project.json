@@ -6,9 +6,21 @@
   "notes": "本项目日志标签 app=my-app；查指标时 pod 前缀为 my-app-",
   "environments": {
     "test": {
+      "url": "https://grafana.test.example.com",
+      "user": "viewer",
+      "password": "********",
       "datasources": {
-        "loki": "grafana-loki-uid",
-        "prometheus": "grafana-prometheus-uid"
+        "loki": "loki-uid-here",
+        "prometheus": "prom-uid-here"
+      }
+    },
+    "prod": {
+      "url": "https://grafana.prod.example.com",
+      "user": "viewer",
+      "password": "********",
+      "datasources": {
+        "loki": "loki-uid-prod",
+        "prometheus": "prom-uid-prod"
       }
     }
   }

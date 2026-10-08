@@ -2,6 +2,14 @@
 
 本项目的版本发布遵循 [Semantic Versioning](https://semver.org/)，发版为 tag 驱动：推送 `v*` tag 自动发布 npm 并同步 MCP Registry。
 
+## [0.1.4] - 2026-10-08
+
+- 修复 `.mcp.json` env 中 `GRAFANA_APP` / `GRAFANA_NAMESPACE` / `GRAFANA_APP_LABEL` / `GRAFANA_NOTES` 不生效的问题（之前只从 `.grafana.json` 读取）
+- 修复仅在进程环境变量（`.mcp.json` env）中配置 `GRAFANA_{ENV}_*` 时 `switch_environment` 报"未知环境"的问题（`availableEnvs()` 现扫描进程环境变量）
+- `project_context` 输出增强：显示 `.mcp.json` env 已配置的环境列表，标注项目信息字段来源
+- README 重写"快速开始"为两种方式：完全项目级配置（零全局依赖）和 zshrc 全局凭据 + 项目级上下文
+- examples 更新为完整双环境配置示例
+
 ## [0.1.3] - 2026-10-07
 
 - 发版链路切换为 GitHub Actions OIDC Trusted Publishing（首个由 CI 发布的版本）

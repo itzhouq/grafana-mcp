@@ -1,10 +1,24 @@
 {
   "mcpServers": {
     "grafana": {
-      "command": "bun",
-      "args": ["run", "/path/to/grafana-mcp/index.ts"],
+      "command": "bunx",
+      "args": ["grafana-mcp"],
       "env": {
-        "GRAFANA_ENV": "test"
+        "GRAFANA_ENV": "test",
+        "GRAFANA_APP": "my-app",
+        "GRAFANA_NAMESPACE": "my-namespace",
+
+        "GRAFANA_TEST_URL": "https://grafana.test.example.com",
+        "GRAFANA_TEST_USER": "viewer",
+        "GRAFANA_TEST_PASSWORD": "********",
+        "GRAFANA_TEST_LOKI_DATASOURCE": "loki-uid-here",
+        "GRAFANA_TEST_PROMETHEUS_DATASOURCE": "prom-uid-here",
+
+        "GRAFANA_PROD_URL": "https://grafana.prod.example.com",
+        "GRAFANA_PROD_USER": "viewer",
+        "GRAFANA_PROD_PASSWORD": "********",
+        "GRAFANA_PROD_LOKI_DATASOURCE": "loki-uid-prod",
+        "GRAFANA_PROD_PROMETHEUS_DATASOURCE": "prom-uid-prod"
       }
     }
   }

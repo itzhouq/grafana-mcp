@@ -11,7 +11,7 @@
 AI 编码 Agent（Claude Code / Cursor / …）
         │  MCP (stdio)
         ▼
-   grafana-mcp ──读──▶ ~/.zshrc / ~/.zshenv / 项目 .grafana.json（凭据与项目上下文）
+   grafana-mcp ──读──▶ .mcp.json env / .grafana.json / ~/.zshrc（凭据与项目上下文）
         │  HTTP（只读查询 API）
         ▼
    Grafana ──▶ Loki（日志）/ Prometheus（指标）/ Tempo（链路）/ Alerts（告警）
@@ -23,8 +23,8 @@ AI 编码 Agent（Claude Code / Cursor / …）
 
 | 痛点 | 本实现的解法 |
 |---|---|
-| 每个项目会话都要口头告诉 agent "我们的应用在 Grafana 里叫什么"，容易跑偏 | 项目根放一个 `.grafana.json`（app、namespace、默认环境），agent 调 `project_context` 一次对齐方向 |
-| test / prod 双环境凭据区分，而 MCP server 由客户端 spawn，是非交互 shell，**不会 source `.zshrc`**，环境变量读不到 | server 启动时直接**解析 `~/.zshrc` / `~/.zshenv` 文件文本**提取 `GRAFANA_{ENV}_*` 变量，完全不依赖 shell 环境 |
+| 每个项目会话都要口头告诉 agent "我们的应用在 Grafana 里叫什么"，容易跑偏 | 项目根放一个 `.grafana.json` 或在 `.mcp.json` env 中配置（app、namespace、默认环境），agent 调 `project_context` 一次对齐方向 |
+| test / prod 双环境凭据区分，而 MCP server 由客户端 spawn，是非交互 shell，**不会 source `.zshrc`**，环境变量读不到 | 三选一：① `.mcp.json` env 直接传 `GRAFANA_{ENV}_*`（零全局依赖）② server 启动时解析 `~/.zshrc` / `~/.zshenv` 文件文本 ③ 全局配置文件 |
 | 多数据源实例上"按类型取第一个"容易选错 | 优先使用显式配置的数据源 UID，支持按环境指定 |
 
 ## 声明
@@ -37,8 +37,50 @@ AI 编码 Agent（Claude Code / Cursor / …）
 
 前提：本机已安装 [bun](https://bun.sh)（`curl -fsSL https://bun.sh/install | bash`）。项目零 npm 依赖，无需 `npm install`。
 
-### 1. 在项目的 `.mcp.json` 中接入
+### 方式一：完全项目级配置（推荐 — 零全局依赖）
 
+所有信息（test/prod 双环境地址、凭据、数据源 UID、项目 app 名称）全部写在项目 `.mcp.json` 中，不依赖 `~/.zshrc`，换台机器只需复制 `.mcp.json`：
+
+```jsonc
+{
+  "mcpServers": {
+    "grafana": {
+      "command": "bunx",
+      "args": ["grafana-mcp"],
+      "env": {
+        "GRAFANA_ENV": "test",
+        "GRAFANA_APP": "my-app",
+        "GRAFANA_NAMESPACE": "my-namespace",
+
+        "GRAFANA_TEST_URL": "https://grafana.test.example.com",
+        "GRAFANA_TEST_USER": "viewer",
+        "GRAFANA_TEST_PASSWORD": "********",
+        "GRAFANA_TEST_LOKI_DATASOURCE": "loki-uid-here",
+        "GRAFANA_TEST_PROMETHEUS_DATASOURCE": "prom-uid-here",
+
+        "GRAFANA_PROD_URL": "https://grafana.prod.example.com",
+        "GRAFANA_PROD_USER": "viewer",
+        "GRAFANA_PROD_PASSWORD": "********",
+        "GRAFANA_PROD_LOKI_DATASOURCE": "loki-uid-prod",
+        "GRAFANA_PROD_PROMETHEUS_DATASOURCE": "prom-uid-prod"
+      }
+    }
+  }
+}
+```
+
+配置好后：
+- `project_context` 会自动显示当前环境、可用环境列表、项目 app 等信息
+- `switch_environment` 可在 test/prod 之间切换（仅影响当前会话）
+- `loki_query` 会自动注入 `app="my-app"` 标签（传 `injectApp=false` 关闭）
+
+> ⚠️ `.mcp.json` 含明文凭据，务必加入 `.gitignore`。
+
+### 方式二：zshrc 全局凭据 + 项目级上下文
+
+适合多项目共享同一套 Grafana 凭据的场景。凭据配在 `~/.zshrc` 中（一次性），每个项目只配项目上下文：
+
+**项目 `.mcp.json`**（只配项目上下文，不含凭据）：
 ```json
 {
   "mcpServers": {
@@ -54,23 +96,7 @@ AI 编码 Agent（Claude Code / Cursor / …）
 }
 ```
 
-- `GRAFANA_ENV`：该项目默认环境（省略则默认 `test`，安全兜底）
-- `GRAFANA_APP`：该应用在 Grafana/Loki 中的 app 标签值（也可以放到 `.grafana.json`，见下）
-- 重启会话后生效；Claude Code 也可用 `claude mcp add` 交互添加
-
-偏好克隆使用的话：
-
-```bash
-git clone https://github.com/itzhouq/grafana-mcp.git && cd grafana-mcp
-bun run index.ts          # stdio JSON-RPC，接入任意 MCP 客户端
-```
-
-`.mcp.json` 中对应写 `"command": "bun", "args": ["run", "/path/to/grafana-mcp/index.ts"]`。
-
-### 2.（推荐）在项目根创建 `.grafana.json`
-
-比 `.mcp.json` env 能承载更多信息，且对 agent 可见可解释：
-
+**或项目 `.grafana.json`**（承载更多信息，对 agent 可见可解释）：
 ```json
 {
   "defaultEnv": "test",
@@ -88,33 +114,34 @@ bun run index.ts          # stdio JSON-RPC，接入任意 MCP 客户端
 | `appLabel` | app 标签名，默认 `app` |
 | `namespace` | 默认 namespace，供 agent 参考 |
 | `notes` | 自由文本备注，`project_context` 会原样带给 agent |
-| `environments.{env}.datasources` | 按环境指定数据源 UID（不配则按数据源类型自动发现） |
+| `environments.{env}.url` | 该环境的 Grafana 地址（覆盖 zshrc 中的同名变量） |
+| `environments.{env}.user` | 该环境的用户名 |
+| `environments.{env}.password` | 该环境的密码 |
+| `environments.{env}.datasources` | 按环境指定数据源 UID（loki/prometheus/tempo） |
 
-> ⚠️ `.grafana.json` 的 `notes` 是自由文本，可能包含内部信息——建议把它加进项目的 `.gitignore`。
+> ⚠️ `.grafana.json` 的 `notes` 和 `environments` 可能包含敏感信息——建议加入 `.gitignore`。
 
-## 环境配置从哪来
-
-无需任何操作：server 启动时读取 `~/.zshenv` 和 `~/.zshrc` **文件内容**（而非 shell 环境），解析其中的：
-
-```shell
-export GRAFANA_TEST_URL=...        export GRAFANA_PROD_URL=...
-export GRAFANA_TEST_USER=...       export GRAFANA_PROD_USER=...
-export GRAFANA_TEST_PASSWORD=...   export GRAFANA_PROD_PASSWORD=...
-export GRAFANA_TEST_LOKI_DATASOURCE=...      export GRAFANA_PROD_LOKI_DATASOURCE=...
-export GRAFANA_TEST_PROMETHEUS_DATASOURCE=... export GRAFANA_PROD_PROMETHEUS_DATASOURCE=...
-export GRAFANA_DEFAULT_ENV=test   # 可选：全局默认环境
-```
-
-修改 `.zshrc` 后重启会话即生效。环境切换用 `switch_environment` 工具，或 `.mcp.json` 里 `GRAFANA_ENV` 指定默认值。
-
-字段级优先级（从低到高，逐字段合并）：
+### 凭据从哪来（三种来源，按优先级合并）
 
 ```
-~/.zshenv + ~/.zshrc 文本解析
-  → 全局配置 ~/.config/grafana-mcp/config.json（可选，适合无 .zshrc 的机器）
-    → 项目 .grafana.json
-      → 进程环境变量（.mcp.json env：GRAFANA_URL/USER/PASSWORD 直连，或 GRAFANA_{ENV}_URL 按环境覆盖）
+进程环境变量（.mcp.json env：GRAFANA_{ENV}_URL 等按环境，或 GRAFANA_URL 直连）
+  → 项目 .grafana.json 的 environments.{env} 字段
+    → 全局配置 ~/.config/grafana-mcp/config.json（可选，适合无 .zshrc 的机器）
+      → ~/.zshrc + ~/.zshenv 文本解析（适合全机统一配置）
 ```
+
+**不依赖 shell 环境**：MCP server 由客户端 spawn，是非交互、非登录 shell，不会 source rc 文件。本实现直接解析 rc 文件文本或从进程环境变量读取，这是特性而非 workaround。
+
+### 克隆使用
+
+偏好克隆使用的话：
+
+```bash
+git clone https://github.com/itzhouq/grafana-mcp.git && cd grafana-mcp
+bun run index.ts          # stdio JSON-RPC，接入任意 MCP 客户端
+```
+
+`.mcp.json` 中对应写 `"command": "bun", "args": ["run", "/path/to/grafana-mcp/index.ts"]`。
 
 ## 工具列表
 
@@ -141,7 +168,7 @@ export GRAFANA_DEFAULT_ENV=test   # 可选：全局默认环境
 |---|---|---|
 | 使用粒度 | **项目级**：项目根 `.grafana.json` 声明上下文，`project_context` 一次对齐 | 全局实例，项目信息需每次口头提供 |
 | 多环境 | **test/prod 双环境**一等公民，`switch_environment` 一键切换 | 面向单一实例配置 |
-| 凭据来源 | 解析 `~/.zshrc`/`~/.zshenv` 文本（适配 MCP 客户端非交互 shell）+ 环境变量 + 配置文件 | 环境变量 |
+| 凭据来源 | `.mcp.json` env（零全局依赖）/ `~/.zshrc` 文本解析 / 全局配置文件（三选一，可混用） | 环境变量 |
 | 形态 | 零依赖单文件 TypeScript，bun 直接运行 | Go 二进制 / Docker |
 
 选型建议：要全量 Grafana 管理能力用官方；要"每个业务项目开箱即用的日志/指标排查上下文 + 双环境"，用本仓库。
@@ -156,7 +183,7 @@ export GRAFANA_DEFAULT_ENV=test   # 可选：全局默认环境
 ## FAQ
 
 **为什么 agent 读不到 `.zshrc` 里的环境变量？**
-MCP server 由客户端 spawn，是非交互、非登录 shell，不会 source rc 文件。本实现因此直接解析 rc 文件文本，这是特性而非 workaround。
+MCP server 由客户端 spawn，是非交互、非登录 shell，不会 source rc 文件。本实现提供三种解法：① 在 `.mcp.json` env 中直接配 `GRAFANA_{ENV}_*`（推荐）② server 解析 rc 文件文本 ③ 用全局配置文件。
 
 **不想装 bun？**
 当前运行时依赖 bun（单文件 TS 直跑是刻意的设计取舍）。Node 兼容的编译产物在 Roadmap 中，欢迎 issue 催更。
