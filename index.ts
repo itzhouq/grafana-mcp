@@ -47,6 +47,10 @@ interface EnvConfig {
   url?: string;
   user?: string;
   password?: string;
+  /** 该环境的 Loki app 标签值；同一项目在 test/prod 命名可能不同，故按环境配置 */
+  app?: string;
+  /** 该环境 app 标签名，默认 app */
+  appLabel?: string;
   datasources?: DatasourceUids;
 }
 
@@ -100,7 +104,7 @@ function parseRcFile(filePath: string, into: Record<string, EnvConfig>): string 
       continue;
     }
     const m = raw.match(
-      /^\s*(?:export\s+)?GRAFANA_([A-Za-z0-9]+)_(URL|USER|PASSWORD|LOKI_DATASOURCE|PROMETHEUS_DATASOURCE|TEMPO_DATASOURCE)\s*=\s*(.+?)\s*$/,
+      /^\s*(?:export\s+)?GRAFANA_([A-Za-z0-9]+)_(URL|USER|PASSWORD|APP|APP_LABEL|LOKI_DATASOURCE|PROMETHEUS_DATASOURCE|TEMPO_DATASOURCE)\s*=\s*(.+?)\s*$/,
     );
     if (!m) continue;
     const [, envSegment, key, rawVal] = m;
@@ -110,6 +114,8 @@ function parseRcFile(filePath: string, into: Record<string, EnvConfig>): string 
     if (key === "URL") env.url = val;
     else if (key === "USER") env.user = val;
     else if (key === "PASSWORD") env.password = val;
+    else if (key === "APP") env.app = val;
+    else if (key === "APP_LABEL") env.appLabel = val;
     else {
       env.datasources ??= {};
       if (key === "LOKI_DATASOURCE") env.datasources.loki = val;
@@ -156,6 +162,8 @@ function pickEnvConfig(v: unknown): EnvConfig {
   if (typeof r.url === "string") env.url = r.url;
   if (typeof r.user === "string") env.user = r.user;
   if (typeof r.password === "string") env.password = r.password;
+  if (typeof r.app === "string") env.app = r.app;
+  if (typeof r.appLabel === "string") env.appLabel = r.appLabel;
   const dsv: DatasourceUids = {};
   if (typeof ds.loki === "string") dsv.loki = ds.loki;
   if (typeof ds.prometheus === "string") dsv.prometheus = ds.prometheus;
@@ -254,12 +262,17 @@ function mergedEnvConfig(envName: string): EnvConfig {
     ...projectConfig.environments?.[envName],
   };
   merged.datasources = { ...rcEnvs[envName]?.datasources, ...globalEnvs[envName]?.datasources, ...projectConfig.environments?.[envName]?.datasources };
+  // 环境级 app 标签：同一项目在 test/prod 的 app 命名可能不同，按 环境配置 < 进程 env 合并
+  merged.app = projectConfig.environments?.[envName]?.app ?? globalEnvs[envName]?.app ?? rcEnvs[envName]?.app;
+  merged.appLabel = projectConfig.environments?.[envName]?.appLabel ?? globalEnvs[envName]?.appLabel ?? rcEnvs[envName]?.appLabel;
 
   // 按环境写法：GRAFANA_TEST_URL 等（.mcp.json env 可直接覆盖某个环境）
   const envScoped: EnvConfig = {
     url: process.env[`GRAFANA_${upper}_URL`],
     user: process.env[`GRAFANA_${upper}_USER`],
     password: process.env[`GRAFANA_${upper}_PASSWORD`],
+    app: process.env[`GRAFANA_${upper}_APP`],
+    appLabel: process.env[`GRAFANA_${upper}_APP_LABEL`],
     datasources: {
       loki: process.env[`GRAFANA_${upper}_LOKI_DATASOURCE`],
       prometheus: process.env[`GRAFANA_${upper}_PROMETHEUS_DATASOURCE`],
@@ -282,11 +295,31 @@ function mergedEnvConfig(envName: string): EnvConfig {
     url: envScoped.url ?? merged.url ?? activeEnv.url,
     user: envScoped.user ?? merged.user ?? activeEnv.user,
     password: envScoped.password ?? merged.password ?? activeEnv.password,
+    app: envScoped.app ?? merged.app,
+    appLabel: envScoped.appLabel ?? merged.appLabel,
     datasources: {
       loki: envScoped.datasources.loki ?? merged.datasources?.loki ?? activeEnv.datasources?.loki,
       prometheus: envScoped.datasources.prometheus ?? merged.datasources?.prometheus ?? activeEnv.datasources?.prometheus,
       tempo: envScoped.datasources.tempo ?? merged.datasources?.tempo ?? activeEnv.datasources?.tempo,
     },
+  };
+}
+
+/** 当前环境生效的 app 标签：环境级配置优先，回退到项目级（app/appLabel） */
+function currentApp(): { value?: string; label: string; source: string } {
+  const env = mergedEnvConfig(currentEnv);
+  if (env.app) {
+    const src = process.env[`GRAFANA_${currentEnv.toUpperCase()}_APP`]
+      ? `来自 .mcp.json env GRAFANA_${currentEnv.toUpperCase()}_APP`
+      : projectConfig.environments?.[currentEnv]?.app
+        ? `来自 .grafana.json environments.${currentEnv}.app`
+        : `来自环境 ${currentEnv} 的 GRAFANA_${currentEnv.toUpperCase()}_APP`;
+    return { value: env.app, label: env.appLabel ?? "app", source: src };
+  }
+  return {
+    value: projectConfig.app,
+    label: projectConfig.appLabel ?? "app",
+    source: process.env.GRAFANA_APP ? "来自 .mcp.json env GRAFANA_APP（项目级）" : "来自 .grafana.json（项目级）",
   };
 }
 
@@ -467,7 +500,7 @@ async function resolveDatasource(type: keyof DatasourceUids): Promise<Datasource
 
 // ── Loki app 标签自动注入（减少方向跑偏） ───────────────────────────────────
 
-function injectAppLabel(query: string, label: string, value: string): { query: string; injected: boolean; reason: string } {
+function injectAppLabel(query: string, label: string, value: string, source = "项目配置"): { query: string; injected: boolean; reason: string } {
   const open = query.indexOf("{");
   if (open === -1) return { query, injected: false, reason: "查询中没有 selector（{...}），未注入" };
   const close = query.indexOf("}", open);
@@ -481,7 +514,7 @@ function injectAppLabel(query: string, label: string, value: string): { query: s
   return {
     query: query.slice(0, open + 1) + patched + query.slice(close),
     injected: true,
-    reason: `已在 selector 注入 ${label}="${value}"（来自项目配置）`,
+    reason: `已在 selector 注入 ${label}="${value}"（${source}）`,
   };
 }
 
@@ -506,11 +539,14 @@ async function toolProjectContext(): Promise<string> {
     lines.push(`.mcp.json env 已配置的环境: ${envScopedList.join(", ")}（地址/凭据通过 GRAFANA_{ENV}_* 传入）`);
   }
   lines.push("");
-  if (projectConfig.app || projectConfig.namespace || projectConfig.notes) {
+  const effApp = currentApp();
+  if (effApp.value || projectConfig.namespace || projectConfig.notes) {
     lines.push("── 项目信息 ──");
-    if (projectConfig.app) {
-      const appSource = process.env.GRAFANA_APP ? "（来自 .mcp.json env GRAFANA_APP）" : projectConfigPath ? "（来自 .grafana.json）" : "";
-      lines.push(`项目 App: ${projectConfig.app}${appSource}，Loki 标签 ${projectConfig.appLabel ?? "app"}，loki_query 默认自动注入`);
+    if (effApp.value) {
+      lines.push(`当前环境 App: ${effApp.value}（Loki 标签 ${effApp.label}，${effApp.source}），loki_query 默认自动注入`);
+      if (projectConfig.app && projectConfig.app !== effApp.value) {
+        lines.push(`项目级默认 App: ${projectConfig.app}（被环境级配置覆盖）`);
+      }
     }
     if (projectConfig.namespace) {
       const nsSource = process.env.GRAFANA_NAMESPACE ? "（来自 .mcp.json env）" : projectConfigPath ? "（来自 .grafana.json）" : "";
@@ -528,9 +564,9 @@ async function toolProjectContext(): Promise<string> {
       .join(", ");
     lines.push(`  [${name}${name === currentEnv ? " ← 当前" : ""}] ${cfg.url ?? "（未配置 URL）"}  user=${cfg.user ?? "（空）"} password=${maskPassword(cfg.password)}${dsText ? `  数据源: ${dsText}` : ""}`);
   }
-  if (projectConfig.app) {
+  if (effApp.value) {
     lines.push("");
-    lines.push(`提示：loki_query 会自动为缺省 selector 注入 ${projectConfig.appLabel ?? "app"}="${projectConfig.app}"；传 injectApp=false 可关闭。`);
+    lines.push(`提示：loki_query 会自动为缺省 selector 注入 ${effApp.label}="${effApp.value}"（随环境切换）；传 injectApp=false 可关闭。`);
   }
   return truncate(lines.join("\n"));
 }
@@ -582,9 +618,10 @@ async function toolAlerts(): Promise<string> {
 
 async function appInjectionParams(args: Record<string, unknown>): Promise<{ label: string; value: string | undefined; inject: boolean }> {
   const inject = args.injectApp !== false;
-  const label = optStr(args, "appLabel") ?? projectConfig.appLabel ?? "app";
+  const eff = currentApp();
+  const label = optStr(args, "appLabel") ?? eff.label;
   const explicitApp = optStr(args, "app");
-  const value = explicitApp ?? projectConfig.app;
+  const value = explicitApp ?? eff.value;
   return { label, value, inject: inject && !!value };
 }
 
@@ -597,7 +634,7 @@ async function toolLokiQuery(args: Record<string, unknown>): Promise<string> {
   const injection: string[] = [];
   const { label, value, inject } = await appInjectionParams(args);
   if (inject && value) {
-    const r = injectAppLabel(query, label, value);
+    const r = injectAppLabel(query, label, value, currentApp().source);
     query = r.query;
     injection.push(r.reason);
   }
@@ -651,11 +688,12 @@ async function toolLokiLabels(args: Record<string, unknown>): Promise<string> {
 
   const result = (await grafanaGet(`/api/datasources/proxy/${ds.id}/loki/api/v1/label/${encodeURIComponent(label)}/values`, { start, end })) as { data?: string[] } | string[];
   const values = Array.isArray(result) ? result : (result.data ?? []);
+  const eff = currentApp();
   const hint =
-    projectConfig.app && label === (projectConfig.appLabel ?? "app")
-      ? values.includes(projectConfig.app)
-        ? `\n提示：项目配置的 app "${projectConfig.app}" 在取值列表中。✓`
-        : `\n警告：项目配置的 app "${projectConfig.app}" 不在当前取值列表中！可能环境不对（当前 ${currentEnv}）或 app 名称有误，请勿基于错误假设继续查询。`
+    eff.value && label === eff.label
+      ? values.includes(eff.value)
+        ? `\n提示：当前环境 App "${eff.value}"（${eff.source}）在取值列表中。✓`
+        : `\n警告：当前环境 App "${eff.value}" 不在取值列表中！请用 loki_labels label=app 核对真实 app 名称，勿基于错误假设继续查询。`
       : "";
   const lines = [
     `=== Loki 标签 ${label} 的取值（环境 ${currentEnv}）===`,
@@ -865,9 +903,9 @@ const TOOLS: ToolDef[] = [
     name: "loki_query",
     description:
       `执行 LogQL 日志查询（range 查询）。` +
-      (projectConfig.app
-        ? `本项目默认 app 标签 ${projectConfig.appLabel ?? "app"}="${projectConfig.app}" 会自动注入到首个 selector（传 injectApp=false 关闭）。`
-        : `若项目配置了 app，会自动注入到首个 selector（传 injectApp=false 关闭）。`) +
+      (currentApp().value
+        ? `当前环境默认 app 标签 ${currentApp().label}="${currentApp().value}" 会自动注入到首个 selector（传 injectApp=false 关闭）；切换环境后自动改用该环境的 app。`
+        : `若项目或环境配置了 app，会自动注入到首个 selector（传 injectApp=false 关闭）。`) +
       ` 示例 query：{namespace="prod", container="api"} |~ "(?i)(error|panic)"`,
     inputSchema: {
       type: "object",

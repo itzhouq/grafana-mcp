@@ -3,7 +3,7 @@
   "name": "io.github.itzhouq/grafana-mcp",
   "title": "Grafana MCP",
   "description": "Read-only project-level Grafana MCP: Loki logs, metrics, traces, alerts, test/prod switching",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "homepage": "https://github.com/itzhouq/grafana-mcp",
   "repository": {
     "url": "https://github.com/itzhouq/grafana-mcp",
@@ -31,7 +31,7 @@
     {
       "registryType": "npm",
       "identifier": "grafana-mcp",
-      "version": "0.1.3",
+      "version": "0.1.5",
       "transport": {
         "type": "stdio"
       },
@@ -87,7 +87,21 @@
         },
         {
           "name": "GRAFANA_APP",
-          "description": "App label value used to scope Loki queries for this project",
+          "description": "Project-level app label value used to scope Loki queries (fallback when no per-env app is set)",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "GRAFANA_TEST_APP",
+          "description": "App label value for the test environment (overrides GRAFANA_APP when present); useful when the same project uses a different app name per environment",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "GRAFANA_PROD_APP",
+          "description": "App label value for the production environment (overrides GRAFANA_APP when present)",
           "format": "string",
           "isRequired": false,
           "isSecret": false

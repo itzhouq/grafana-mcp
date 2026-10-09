@@ -117,6 +117,8 @@ AI 编码 Agent（Claude Code / Cursor / …）
 | `environments.{env}.url` | 该环境的 Grafana 地址（覆盖 zshrc 中的同名变量） |
 | `environments.{env}.user` | 该环境的用户名 |
 | `environments.{env}.password` | 该环境的密码 |
+| `environments.{env}.app` | 该环境的 app 标签值（同一项目 test/prod 命名不同时用，优先于顶层 `app`） |
+| `environments.{env}.appLabel` | 该环境的 app 标签名，默认 `app` |
 | `environments.{env}.datasources` | 按环境指定数据源 UID（loki/prometheus/tempo） |
 
 > ⚠️ `.grafana.json` 的 `notes` 和 `environments` 可能包含敏感信息——建议加入 `.gitignore`。

@@ -2,6 +2,16 @@
 
 本项目的版本发布遵循 [Semantic Versioning](https://semver.org/)，发版为 tag 驱动：推送 `v*` tag 自动发布 npm 并同步 MCP Registry。
 
+## [0.1.5] - 2026-10-09
+
+- 新增**环境级 app 标签**：同一项目在 test/prod 的 app 命名往往不同，现支持按环境配置
+  - `.mcp.json` env：`GRAFANA_{ENV}_APP`（app 标签值）与 `GRAFANA_{ENV}_APP_LABEL`（标签名，默认 `app`）
+  - `.grafana.json`：`environments.{env}.app` / `environments.{env}.appLabel`
+  - `~/.zshrc`：`GRAFANA_{ENV}_APP` / `GRAFANA_{ENV}_APP_LABEL`
+- 环境级 app 优先于项目级 `GRAFANA_APP`；`switch_environment` 切换后 `loki_query` 自动改用该环境的 app，注入来源在输出中标注
+- `project_context` 显示当前环境生效的 App 及其来源；当项目级默认 App 被环境级配置覆盖时明确提示
+- README 新增环境级 app 配置说明；examples 双环境示例补充 `GRAFANA_{ENV}_APP`
+
 ## [0.1.4] - 2026-10-08
 
 - 修复 `.mcp.json` env 中 `GRAFANA_APP` / `GRAFANA_NAMESPACE` / `GRAFANA_APP_LABEL` / `GRAFANA_NOTES` 不生效的问题（之前只从 `.grafana.json` 读取）

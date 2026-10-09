@@ -9,6 +9,7 @@
       "url": "https://grafana.test.example.com",
       "user": "viewer",
       "password": "********",
+      "app": "my-app-test",
       "datasources": {
         "loki": "loki-uid-here",
         "prometheus": "prom-uid-here"
@@ -18,6 +19,7 @@
       "url": "https://grafana.prod.example.com",
       "user": "viewer",
       "password": "********",
+      "app": "my-app",
       "datasources": {
         "loki": "loki-uid-prod",
         "prometheus": "prom-uid-prod"
